@@ -14,14 +14,24 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from db_schema import add_lead, get_lead, get_conn
 from unipile_client import Unipile, load_env
 
-# Influencers who post about outbound/SDR/agency growth
-# Add their LinkedIn public_identifier and provider_id
-INFLUENCERS = [
-    {'name': 'Vanesa Ponce', 'public_id': 'vanesa-ponce-a5103a295', 'provider_id': None, 'topics': ['SDR', 'outbound', 'AI']},
-    {'name': 'Cedric Seguela', 'public_id': 'cedric-seguela-18b61b226', 'provider_id': 'ACoAADiwRDsB2IXCLa4nD9agOf4A4NJsaqun2g0', 'topics': ['outbound', 'cold email', 'agency']},
-    # Add more influencers here:
-    # {'name': 'Name', 'public_id': 'linkedin-id', 'provider_id': 'ACo...', 'topics': ['outbound']},
-]
+# Influencer list file
+from pathlib import Path
+INFLUENCERS_FILE = Path(os.path.expanduser('~/.hermes/profiles/linkedin-setter/data/influencers.json'))
+
+def load_influencers():
+    """Load influencers from JSON file."""
+    if INFLUENCERS_FILE.exists():
+        try:
+            return json.loads(INFLUENCERS_FILE.read_text())
+        except:
+            pass
+    # Fallback
+    return [
+        {'name': 'Vanesa Ponce', 'public_id': 'vanesa-ponce-a5103a295', 'provider_id': None, 'topics': ['SDR', 'outbound', 'AI']},
+        {'name': 'Cedric Seguela', 'public_id': 'cedric-seguela-18b61b226', 'provider_id': 'ACoAADiwRDsB2IXCLa4nD9agOf4A4NJsaqun2g0', 'topics': ['outbound', 'cold email', 'agency']},
+    ]
+
+INFLUENCERS = load_influencers()
 
 # Keywords that signal viral posts worth scraping
 VIRAL_KEYWORDS = [
