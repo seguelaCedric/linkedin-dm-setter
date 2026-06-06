@@ -1,0 +1,33 @@
+name: linkedin-dm-setter
+version: 1.0.0
+description: "LinkedIn DM Setter agent -- finds viral posts, scrapes commenters, scores ICP, sends throttled connection requests, drafts messages, and manages conversation state machine via Unipile API."
+author: Automated Client Acquisition
+
+provides_tools:
+  - linkedin_setup_profile
+  - linkedin_discover_posts
+  - linkedin_send_connections
+  - linkedin_check_replies
+  - linkedin_queue_drafts
+  - linkedin_approve_message
+  - linkedin_send_approved
+  - linkedin_throttle_status
+  - linkedin_funnel_report
+  - linkedin_add_lead
+
+requires_env:
+  - name: UNIPILE_API_KEY
+    description: "Unipile API key for LinkedIn operations"
+    secret: true
+  - name: UNIPILE_BASE_URL
+    description: "Unipile API base URL (e.g. https://api13.unipile.com:14389/api/v1)"
+    secret: false
+  - name: UNIPILE_LINKEDIN_ACCOUNT_ID
+    description: "Primary LinkedIn account ID from Unipile"
+    secret: false
+  - name: TELEGRAM_BOT_TOKEN
+    description: "Telegram bot token for draft approvals and notifications"
+    secret: true
+  - name: TELEGRAM_HOME_CHAT_ID
+    description: "Telegram chat ID for notifications"
+    secret: false
