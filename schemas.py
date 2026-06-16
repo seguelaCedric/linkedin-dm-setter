@@ -3,7 +3,7 @@
 
 LINKEDIN_SETUP_PROFILE = {
     "name": "linkedin_setup_profile",
-    "description": "Set up the LinkedIn DM Setter Hermes profile with SOUL.md, cron jobs, and database. Run once during installation.",
+    "description": "Set up the LinkedIn DM Setter Hermes profile with SOUL.md, cron jobs, and database. Asks the onboarding questionnaire to configure mode, ICP, voice, volume, and accounts. Run once during installation.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -11,6 +11,60 @@ LINKEDIN_SETUP_PROFILE = {
                 "type": "string",
                 "description": "Name for the Hermes profile (default: linkedin-setter)",
                 "default": "linkedin-setter"
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["aca", "telegram", "both"],
+                "description": "Deployment mode: 'aca' (ACA auto-pilot pushes to sequences), 'telegram' (human-in-the-loop approval), or 'both' (ACA for Tier 2, Telegram for Tier 1)",
+                "default": "telegram"
+            },
+            "icp_industries": {
+                "type": "string",
+                "description": "Target industries, comma-separated (e.g. 'B2B SaaS, marketing agencies, wealth management')"
+            },
+            "icp_titles": {
+                "type": "string",
+                "description": "Target job titles, comma-separated (e.g. 'founder, CEO, head of growth, VP sales')"
+            },
+            "icp_company_size": {
+                "type": "string",
+                "description": "Target company size range (e.g. '1-10', '10-50', '50-200')"
+            },
+            "icp_geography": {
+                "type": "string",
+                "description": "Target geography (e.g. 'US only', 'North America', 'global')"
+            },
+            "icp_pain_points": {
+                "type": "string",
+                "description": "Pain points you solve, comma-separated (e.g. 'too many tools, low reply rates, cannot scale outbound')"
+            },
+            "voice_tone": {
+                "type": "string",
+                "enum": ["casual", "professional", "direct"],
+                "description": "Message voice: 'casual' (DM from a peer, lowercase), 'professional' (warm but formal), 'direct' (punchy, minimal words)",
+                "default": "casual"
+            },
+            "volume_target": {
+                "type": "string",
+                "enum": ["conservative", "standard", "aggressive"],
+                "description": "Weekly volume: 'conservative' (20-50/week), 'standard' (50-100/week), 'aggressive' (100-200/week)",
+                "default": "standard"
+            },
+            "content_angle": {
+                "type": "string",
+                "description": "Hook strategy for openers (e.g. 'commenting on their posts', 'referencing mutual connections', 'industry insight')"
+            },
+            "aca_org_id": {
+                "type": "string",
+                "description": "ACA organization ID (required for 'aca' or 'both' modes)"
+            },
+            "aca_lead_list_id": {
+                "type": "string",
+                "description": "ACA lead list ID to push leads into (required for 'aca' or 'both' modes)"
+            },
+            "aca_sequence_id": {
+                "type": "string",
+                "description": "ACA sequence or campaign ID for auto-enrollment (required for 'aca' or 'both' modes)"
             },
             "unipile_api_key": {
                 "type": "string",
@@ -28,9 +82,24 @@ LINKEDIN_SETUP_PROFILE = {
                 "type": "string",
                 "description": "Backup LinkedIn account ID from Unipile (optional)"
             },
+            "account_count": {
+                "type": "integer",
+                "description": "Number of LinkedIn accounts in Unipile (default: 1)",
+                "default": 1
+            },
+            "daily_limit_per_account": {
+                "type": "integer",
+                "description": "Daily send limit per account (default: 20)",
+                "default": 20
+            },
+            "global_daily_limit": {
+                "type": "integer",
+                "description": "Global daily limit across all accounts (default: 35)",
+                "default": 35
+            },
             "telegram_bot_token": {
                 "type": "string",
-                "description": "Telegram bot token for notifications"
+                "description": "Telegram bot token for notifications and approvals"
             },
             "telegram_chat_id": {
                 "type": "string",
@@ -200,6 +269,97 @@ LINKEDIN_ADD_LEAD = {
     }
 }
 
+LINKEDIN_PUSH_TO_ACA = {
+    "name": "linkedin_push_to_aca",
+    "description": "Push ICP-scored leads from the pipeline database into an ACA lead list for auto-enrollment. Creates ACA email leads with LinkedIn URLs. Mode A (ACA auto-pilot) operation.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "min_icp_score": {
+                "type": "integer",
+                "description": "Minimum ICP score to push (default: 7)",
+                "default": 7
+            },
+            "aca_org_id": {
+                "type": "string",
+                "description": "ACA organization ID"
+            },
+            "aca_lead_list_id": {
+                "type": "string",
+                "description": "ACA lead list UUID to add contacts into"
+            },
+            "max_leads": {
+                "type": "integer",
+                "description": "Maximum leads to push in this batch (default: 50)",
+                "default": 50
+            },
+            "stage_filter": {
+                "type": "string",
+                "description": "Only push leads at this pipeline stage (default: 'connected')",
+                "default": "connected"
+            }
+        },
+        "required": ["aca_org_id", "aca_lead_list_id"]
+    }
+}
+
+LINKEDIN_ACA_AUTO_ENROLL = {
+    "name": "linkedin_aca_auto_enroll",
+    "description": "Auto-enroll leads from an ACA lead list into a campaign or sequence. This triggers ACA's campaign engine: sequences, follow-ups, reply detection, and calendar booking. Mode A (ACA auto-pilot) operation.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "aca_org_id": {
+                "type": "string",
+                "description": "ACA organization ID"
+            },
+            "aca_lead_list_id": {
+                "type": "string",
+                "description": "ACA lead list UUID containing leads to enroll"
+            },
+            "aca_sequence_id": {
+                "type": "string",
+                "description": "ACA sequence or campaign UUID for enrollment"
+            },
+            "confirm_enroll": {
+                "type": "boolean",
+                "description": "Must be true to perform enrollment. Safety gate.",
+                "default": False
+            },
+            "max_leads": {
+                "type": "integer",
+                "description": "Maximum leads to enroll (default: 50)",
+                "default": 50
+            }
+        },
+        "required": ["aca_org_id", "aca_lead_list_id", "aca_sequence_id", "confirm_enroll"]
+    }
+}
+
+LINKEDIN_ACA_STATUS = {
+    "name": "linkedin_aca_status",
+    "description": "Check ACA campaign/sequence status: reply counts, booked calls, enrollment progress, and conversation stages. For Mode A (ACA auto-pilot) monitoring.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "aca_org_id": {
+                "type": "string",
+                "description": "ACA organization ID"
+            },
+            "aca_sequence_id": {
+                "type": "string",
+                "description": "ACA sequence or campaign UUID to check"
+            },
+            "days": {
+                "type": "integer",
+                "description": "Number of days to report on (default: 7)",
+                "default": 7
+            }
+        },
+        "required": ["aca_org_id"]
+    }
+}
+
 ALL_SCHEMAS = [
     LINKEDIN_SETUP_PROFILE,
     LINKEDIN_DISCOVER_POSTS,
@@ -211,4 +371,7 @@ ALL_SCHEMAS = [
     LINKEDIN_THROTTLE_STATUS,
     LINKEDIN_FUNNEL_REPORT,
     LINKEDIN_ADD_LEAD,
+    LINKEDIN_PUSH_TO_ACA,
+    LINKEDIN_ACA_AUTO_ENROLL,
+    LINKEDIN_ACA_STATUS,
 ]

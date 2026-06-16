@@ -55,45 +55,107 @@ def _get_db_path(profile_name="linkedin-setter"):
 
 
 def handle_setup(args, **kwargs):
-    """Set up the LinkedIn DM Setter profile."""
+    """Set up the LinkedIn DM Setter profile with onboarding questionnaire."""
     profile_name = args.get("profile_name", "linkedin-setter")
-    unipile_api_key = args.get("unipile_api_key")
-    unipile_base_url = args.get("unipile_base_url")
-    unipile_account_id = args.get("unipile_account_id")
+    mode = args.get("mode", "telegram")
+
+    # Credentials
+    unipile_api_key = args.get("unipile_api_key", "")
+    unipile_base_url = args.get("unipile_base_url", "")
+    unipile_account_id = args.get("unipile_account_id", "")
     unipile_account_id_backup = args.get("unipile_account_id_backup", "")
-    telegram_bot_token = args.get("telegram_bot_token")
-    telegram_chat_id = args.get("telegram_chat_id")
-    
+    telegram_bot_token = args.get("telegram_bot_token", "")
+    telegram_chat_id = args.get("telegram_chat_id", "")
+
+    # Questionnaire
+    icp_industries = args.get("icp_industries", "")
+    icp_titles = args.get("icp_titles", "")
+    icp_company_size = args.get("icp_company_size", "")
+    icp_geography = args.get("icp_geography", "")
+    icp_pain_points = args.get("icp_pain_points", "")
+    voice_tone = args.get("voice_tone", "casual")
+    volume_target = args.get("volume_target", "standard")
+    content_angle = args.get("content_angle", "")
+    aca_org_id = args.get("aca_org_id", "")
+    aca_lead_list_id = args.get("aca_lead_list_id", "")
+    aca_sequence_id = args.get("aca_sequence_id", "")
+    account_count = args.get("account_count", 1)
+    daily_limit = args.get("daily_limit_per_account", 20)
+    global_limit = args.get("global_daily_limit", 35)
+
+    # Volume mapping
+    volume_map = {"conservative": 35, "standard": 70, "aggressive": 140}
+    weekly_volume = volume_map.get(volume_target, 70)
+
     results = []
-    
+
     # 1. Create profile
     try:
         subprocess.run(["hermes", "profile", "create", profile_name], capture_output=True, text=True, timeout=30)
         results.append("Profile created: " + profile_name)
     except Exception as e:
         results.append("Profile creation note: " + str(e))
-    
+
     profile_dir = _get_profile_dir(profile_name)
-    
-    # 2. Write .env
-    env_content = "\n".join([
+
+    # 2. Write .env with all credentials
+    env_lines = [
         "UNIPILE_API_KEY=" + unipile_api_key,
         "UNIPILE_BASE_URL=" + unipile_base_url,
         "UNIPILE_LINKEDIN_ACCOUNT_ID=" + unipile_account_id,
         "UNIPILE_LINKEDIN_ACCOUNT_ID_BACKUP=" + unipile_account_id_backup,
         "TELEGRAM_BOT_TOKEN=" + telegram_bot_token,
         "TELEGRAM_HOME_CHAT_ID=" + telegram_chat_id,
-        "HERMES_HOME=/root/.hermes",
-    ])
-    (profile_dir / ".env").write_text(env_content)
-    results.append(".env written")
-    
-    # 3. Write SOUL.md
-    soul_template = TEMPLATES_DIR / "SOUL.md.template"
-    if soul_template.exists():
-        (profile_dir / "SOUL.md").write_text(soul_template.read_text())
-        results.append("SOUL.md written")
-    
+    ]
+    if aca_org_id:
+        env_lines.append("ACA_ORG_ID=" + aca_org_id)
+    (profile_dir / ".env").write_text("\n".join(env_lines) + "\n")
+    results.append(".env written" + (" (with ACA)" if aca_org_id else ""))
+
+    # 3. Generate SOUL.md from questionnaire
+    mode_labels = {"aca": "ACA Auto-Pilot (push scored leads to sequences)", "telegram": "Telegram Human-in-the-Loop (approve every message)", "both": "Hybrid: ACA for Tier 2, Telegram for Tier 1"}
+    voice_labels = {"casual": "short, lowercase, no em dashes, sound like a DM from a peer", "professional": "warm but formal, slightly more polished", "direct": "punchy, minimal words, maximum impact"}
+
+    soul_content = f"""# LinkedIn DM Setter
+
+## Identity
+You are an autonomous LinkedIn DM outreach agent operating in **{mode_labels.get(mode, mode)}** mode.
+
+## ICP Definition
+- Industries: {icp_industries or 'B2B SaaS, marketing agencies, consultancies'}
+- Titles: {icp_titles or 'founder, CEO, head of growth, VP sales'}
+- Company size: {icp_company_size or '10-200'}
+- Geography: {icp_geography or 'US, Canada, UK'}
+- Pain points: {icp_pain_points or 'too many tools, low reply rates, cannot scale outbound'}
+
+## Voice & Tone
+{voice_labels.get(voice_tone, 'casual')}
+Content angle: {content_angle or 'commenting on their posts and referencing what they DID'}
+
+## Volume
+{weekly_volume} connection requests per week, {account_count} LinkedIn account(s), {daily_limit}/day per account, {global_limit}/day global max.
+
+## Operating Mode: {mode.upper()}
+"""
+    if mode in ("aca", "both"):
+        soul_content += f"""
+### Mode A: ACA Auto-Pilot
+- Push leads to ACA list: {aca_lead_list_id or 'set in config'}
+- Auto-enroll in sequence: {aca_sequence_id or 'set in config'}
+- ACA handles: sequences, follow-ups, reply detection, calendar booking
+- You check the ACA dashboard, not Telegram
+"""
+    if mode in ("telegram", "both"):
+        soul_content += """
+### Mode B: Telegram Human-in-the-Loop
+- Every message goes through Telegram for approval
+- You control every stage transition
+- Use for high-value leads and custom messaging
+"""
+
+    (profile_dir / "SOUL.md").write_text(soul_content)
+    results.append("SOUL.md generated from questionnaire")
+
     # 4. Copy scripts
     scripts_dest = profile_dir / "scripts"
     scripts_dest.mkdir(parents=True, exist_ok=True)
@@ -101,18 +163,26 @@ def handle_setup(args, **kwargs):
     for script in SCRIPTS_DIR.glob("*.py"):
         shutil.copy2(script, scripts_dest / script.name)
     results.append("Scripts copied")
-    
+
     # 5. Initialize database
     db_schema = scripts_dest / "db_schema.py"
     if db_schema.exists():
         subprocess.run([sys.executable, str(db_schema)], capture_output=True, text=True, timeout=30)
         results.append("Database initialized")
-    
+
     # 6. Create data directories
     (profile_dir / "data").mkdir(parents=True, exist_ok=True)
     results.append("Data directories created")
-    
-    return json.dumps({"status": "ok", "results": results})
+
+    return json.dumps({
+        "status": "ok",
+        "mode": mode,
+        "weekly_volume": weekly_volume,
+        "voice_tone": voice_tone,
+        "has_aca": bool(aca_org_id),
+        "results": results,
+        "next_step": "Run 'hermes --profile " + profile_name + "' and test with linkedin_discover_posts to verify everything works."
+    })
 
 
 def handle_discover_posts(args, **kwargs):
@@ -284,6 +354,103 @@ def handle_add_lead(args, **kwargs):
         return json.dumps({"status": "error", "error": str(e)})
 
 
+def handle_push_to_aca(args, **kwargs):
+    """Push scored leads from pipeline DB to ACA lead list."""
+    import sqlite3
+
+    min_icp_score = args.get("min_icp_score", 7)
+    aca_org_id = args.get("aca_org_id")
+    aca_lead_list_id = args.get("aca_lead_list_id")
+    max_leads = args.get("max_leads", 50)
+    stage_filter = args.get("stage_filter", "connected")
+
+    db_path = _get_db_path()
+    if not db_path.exists():
+        return json.dumps({"status": "error", "error": "Database not found"})
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+
+        c.execute("""
+            SELECT l.linkedin_url, l.full_name, l.first_name, l.last_name,
+                   l.title, l.company, l.headline, l.icp_score, c.stage, c.stage_name
+            FROM leads l
+            JOIN conversations c ON c.lead_id = l.id
+            WHERE l.icp_score >= ?
+              AND c.stage_name = ?
+              AND l.linkedin_url IS NOT NULL
+            ORDER BY l.icp_score DESC
+            LIMIT ?
+        """, (min_icp_score, stage_filter, max_leads))
+
+        leads = [dict(row) for row in c.fetchall()]
+        conn.close()
+
+        if not leads:
+            return json.dumps({"status": "ok", "pushed": 0, "message": "No leads matching filter"})
+
+        return json.dumps({
+            "status": "ok",
+            "ready_to_push": len(leads),
+            "aca_org_id": aca_org_id,
+            "aca_lead_list_id": aca_lead_list_id,
+            "leads": leads,
+            "next_action": "Use mcp_ACA_bulk_create_leads to create the leads in ACA, then mcp_ACA_add_contacts_to_list to add them to the lead list."
+        })
+    except Exception as e:
+        return json.dumps({"status": "error", "error": str(e)})
+
+
+def handle_aca_auto_enroll(args, **kwargs):
+    """Enroll leads from ACA lead list into a sequence/campaign."""
+    confirm = args.get("confirm_enroll", False)
+    if not confirm:
+        return json.dumps({
+            "status": "ok",
+            "message": "Dry run. Set confirm_enroll=true to execute.",
+            "next_action": "Use mcp_ACA_get_lead_list to verify the leads, then mcp_ACA_enroll_leads to enroll them."
+        })
+
+    aca_org_id = args.get("aca_org_id")
+    aca_lead_list_id = args.get("aca_lead_list_id")
+    aca_sequence_id = args.get("aca_sequence_id")
+    max_leads = args.get("max_leads", 50)
+
+    return json.dumps({
+        "status": "ok",
+        "confirmed": True,
+        "aca_org_id": aca_org_id,
+        "aca_lead_list_id": aca_lead_list_id,
+        "aca_sequence_id": aca_sequence_id,
+        "max_leads": max_leads,
+        "next_action": "Use mcp_ACA_enroll_leads with sequence_id=" + aca_sequence_id + " and lead_ids from the lead list. Then use mcp_ACA_update_campaign_status to activate the campaign."
+    })
+
+
+def handle_aca_status(args, **kwargs):
+    """Check ACA campaign status."""
+    aca_org_id = args.get("aca_org_id")
+    aca_sequence_id = args.get("aca_sequence_id")
+    days = args.get("days", 7)
+
+    if not aca_sequence_id:
+        return json.dumps({
+            "status": "ok",
+            "message": "No sequence_id provided. Returning org overview.",
+            "next_action": "Use mcp_ACA_list_campaigns, mcp_ACA_list_email_sequences, mcp_ACA_list_conversations with interested intent."
+        })
+
+    return json.dumps({
+        "status": "ok",
+        "aca_org_id": aca_org_id,
+        "aca_sequence_id": aca_sequence_id,
+        "days": days,
+        "next_action": "Use mcp_ACA_get_email_sequence with this sequence_id, mcp_ACA_list_email_enrollments for enrollment stats, and mcp_ACA_list_conversations for reply detection."
+    })
+
+
 HANDLERS = {
     "linkedin_setup_profile": handle_setup,
     "linkedin_discover_posts": handle_discover_posts,
@@ -295,4 +462,7 @@ HANDLERS = {
     "linkedin_throttle_status": handle_throttle_status,
     "linkedin_funnel_report": handle_funnel_report,
     "linkedin_add_lead": handle_add_lead,
+    "linkedin_push_to_aca": handle_push_to_aca,
+    "linkedin_aca_auto_enroll": handle_aca_auto_enroll,
+    "linkedin_aca_status": handle_aca_status,
 }

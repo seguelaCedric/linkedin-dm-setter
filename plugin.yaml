@@ -1,6 +1,6 @@
 name: linkedin-dm-setter
-version: 1.0.0
-description: "LinkedIn DM Setter agent -- finds viral posts, scrapes commenters, scores ICP, sends throttled connection requests, drafts messages, and manages conversation state machine via Unipile API."
+version: 1.1.0
+description: "LinkedIn DM Setter agent -- two deployment modes: ACA auto-pilot (push scored leads to sequences, ACA handles everything) or Telegram human-in-the-loop (approve every message). Finds viral posts, scrapes commenters, scores ICP, sends throttled connection requests, drafts messages, and manages conversation state machine via Unipile API."
 author: Automated Client Acquisition
 
 provides_tools:
@@ -14,13 +14,16 @@ provides_tools:
   - linkedin_throttle_status
   - linkedin_funnel_report
   - linkedin_add_lead
+  - linkedin_push_to_aca
+  - linkedin_aca_auto_enroll
+  - linkedin_aca_status
 
 requires_env:
   - name: UNIPILE_API_KEY
     description: "Unipile API key for LinkedIn operations"
     secret: true
   - name: UNIPILE_BASE_URL
-    description: "Unipile API base URL (e.g. https://api13.unipile.com:14389/api/v1)"
+    description: "Unipile API base URL (from your Unipile dashboard)"
     secret: false
   - name: UNIPILE_LINKEDIN_ACCOUNT_ID
     description: "Primary LinkedIn account ID from Unipile"
@@ -30,4 +33,7 @@ requires_env:
     secret: true
   - name: TELEGRAM_HOME_CHAT_ID
     description: "Telegram chat ID for notifications"
+    secret: false
+  - name: ACA_ORG_ID
+    description: "ACA organization ID (required for Mode A: ACA auto-pilot)"
     secret: false
