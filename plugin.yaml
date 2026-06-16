@@ -4,6 +4,8 @@ description: "LinkedIn DM Setter agent -- two deployment modes: ACA auto-pilot (
 author: Automated Client Acquisition
 
 provides_tools:
+  - linkedin_smoke_test
+  - linkedin_status
   - linkedin_setup_profile
   - linkedin_discover_posts
   - linkedin_send_connections

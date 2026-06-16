@@ -49,6 +49,41 @@ def _get_profile_dir(profile_name="linkedin-setter"):
     return Path.home() / ".hermes" / "profiles" / profile_name
 
 
+def _config_has_plugin(profile_name: str, plugin_name: str) -> bool:
+    cfg = _get_profile_dir(profile_name) / "config.yaml"
+    return cfg.exists() and plugin_name in cfg.read_text(errors="ignore")
+
+
+def _run_hermes_cmd(cmd: list[str], timeout: int = 30) -> dict:
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return {"returncode": p.returncode, "stdout": p.stdout.strip(), "stderr": p.stderr.strip()}
+    except Exception as e:
+        return {"returncode": -1, "stdout": "", "stderr": str(e)}
+
+
+def _enable_root_plugin_on_profile(profile_name: str, plugin_name: str) -> list[str]:
+    results = []
+    enabled = _run_hermes_cmd(["hermes", "-p", profile_name, "plugins", "enable", plugin_name])
+    if enabled["returncode"] == 0 or _config_has_plugin(profile_name, plugin_name):
+        results.append(f"enabled root-level plugin on profile: {plugin_name}")
+    else:
+        shared = Path.home() / ".hermes" / "plugins" / plugin_name
+        pdir = _get_profile_dir(profile_name)
+        local = pdir / "plugins"
+        local.mkdir(parents=True, exist_ok=True)
+        link = local / plugin_name
+        try:
+            if shared.exists() and not link.exists():
+                link.symlink_to(shared, target_is_directory=True)
+                results.append("profile-local symlink created for plugin discovery")
+            enabled2 = _run_hermes_cmd(["hermes", "-p", profile_name, "plugins", "enable", plugin_name])
+            results.append("enabled after symlink" if enabled2["returncode"] == 0 else f"enable warning: {(enabled2['stderr'] or enabled2['stdout'])[:160]}")
+        except Exception as e:
+            results.append(f"enable fallback warning: {e}")
+    return results
+
+
 def _get_db_path(profile_name="linkedin-setter"):
     """Get the database path."""
     return _get_profile_dir(profile_name) / "data" / "conversations.db"
@@ -173,6 +208,7 @@ Content angle: {content_angle or 'commenting on their posts and referencing what
     # 6. Create data directories
     (profile_dir / "data").mkdir(parents=True, exist_ok=True)
     results.append("Data directories created")
+    results.extend(_enable_root_plugin_on_profile(profile_name, "linkedin-dm-setter"))
 
     return json.dumps({
         "status": "ok",
@@ -181,8 +217,63 @@ Content angle: {content_angle or 'commenting on their posts and referencing what
         "voice_tone": voice_tone,
         "has_aca": bool(aca_org_id),
         "results": results,
-        "next_step": "Run 'hermes --profile " + profile_name + "' and test with linkedin_discover_posts to verify everything works."
+        "live_use_bridge": [
+            "Plugin code is installed once at root-level ~/.hermes/plugins/linkedin-dm-setter",
+            "The dedicated profile only enables that shared plugin and stores SOUL.md/.env",
+            "Run linkedin_status, then linkedin_smoke_test before any scraping or sends"
+        ],
+        "next_step": "Run 'hermes -p " + profile_name + "' and test with linkedin_status, then linkedin_smoke_test."
     })
+
+
+def handle_status(args, **kwargs):
+    try:
+        profile_name = args.get("profile_name", "linkedin-setter")
+        pdir = _get_profile_dir(profile_name)
+        env = pdir / ".env"
+        env_text = env.read_text(errors="ignore") if env.exists() else ""
+        required = ["UNIPILE_API_KEY", "UNIPILE_BASE_URL", "UNIPILE_LINKEDIN_ACCOUNT_ID", "TELEGRAM_BOT_TOKEN"]
+        checks = {
+            "root_level_plugin_exists": (Path.home()/'.hermes'/'plugins'/'linkedin-dm-setter').exists(),
+            "profile_exists": pdir.exists(),
+            "plugin_enabled_on_profile": _config_has_plugin(profile_name, "linkedin-dm-setter"),
+            "soul_exists": (pdir/'SOUL.md').exists(),
+            "env_exists": env.exists(),
+            "database_exists": _get_db_path(profile_name).exists(),
+            "required_env_present": all(k in env_text and not env_text.split(k+'=',1)[1].split('\n',1)[0].strip()=='' for k in required if env_text),
+        }
+        missing = [k for k,v in checks.items() if not v]
+        return json.dumps({
+            "status": "ok",
+            "profile_name": profile_name,
+            "checks": checks,
+            "ready": not missing,
+            "missing": missing,
+            "next_action": "Run linkedin_setup_profile with credentials and ICP details" if missing else "Run linkedin_smoke_test, then discover posts with a tiny limit."
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def handle_smoke_test(args, **kwargs):
+    try:
+        profile_name = args.get("profile_name", "linkedin-setter")
+        status_payload = json.loads(handle_status({"profile_name": profile_name}))
+        report_dir = _get_profile_dir(profile_name) / "data"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report = report_dir / "smoke-test.json"
+        report.write_text(json.dumps(status_payload, indent=2))
+        return json.dumps({
+            "status": "ok",
+            "paid_calls": False,
+            "linkedin_actions": False,
+            "side_effects": ["created/updated local smoke-test report only"],
+            "saved_to": str(report),
+            "ready": status_payload.get("ready", False),
+            "next_action": status_payload.get("next_action")
+        })
+    except Exception as e:
+        return json.dumps({"error": str(e)})
 
 
 def handle_discover_posts(args, **kwargs):
@@ -453,6 +544,8 @@ def handle_aca_status(args, **kwargs):
 
 HANDLERS = {
     "linkedin_setup_profile": handle_setup,
+    "linkedin_status": handle_status,
+    "linkedin_smoke_test": handle_smoke_test,
     "linkedin_discover_posts": handle_discover_posts,
     "linkedin_send_connections": handle_send_connections,
     "linkedin_check_replies": handle_check_replies,

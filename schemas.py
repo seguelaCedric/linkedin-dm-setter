@@ -110,6 +110,30 @@ LINKEDIN_SETUP_PROFILE = {
     }
 }
 
+LINKEDIN_STATUS = {
+    "name": "linkedin_status",
+    "description": "Check LinkedIn DM Setter readiness: root-level plugin install, dedicated profile, plugin enabled on that profile, SOUL.md, .env credentials, and local database.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "profile_name": {"type": "string", "description": "Dedicated profile to check (default: linkedin-setter)."}
+        },
+        "required": []
+    }
+}
+
+LINKEDIN_SMOKE_TEST = {
+    "name": "linkedin_smoke_test",
+    "description": "Run the smallest safe LinkedIn DM Setter proof: verify config/profile/database state. No LinkedIn sends, no scraping, no paid calls.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "profile_name": {"type": "string", "description": "Dedicated profile to test (default: linkedin-setter)."}
+        },
+        "required": []
+    }
+}
+
 LINKEDIN_DISCOVER_POSTS = {
     "name": "linkedin_discover_posts",
     "description": "Find viral posts from tracked influencers, scrape commenters, score against ICP, and add qualified leads to the database.",
@@ -362,6 +386,8 @@ LINKEDIN_ACA_STATUS = {
 
 ALL_SCHEMAS = [
     LINKEDIN_SETUP_PROFILE,
+    LINKEDIN_STATUS,
+    LINKEDIN_SMOKE_TEST,
     LINKEDIN_DISCOVER_POSTS,
     LINKEDIN_SEND_CONNECTIONS,
     LINKEDIN_CHECK_REPLIES,
